@@ -31,6 +31,10 @@ class Aria2Backend:
                             progress_callback(int(m.group(1)))
             else:
                 return proc
+        except FileNotFoundError as e:
+            print(f"[aria2] aria2c not found. To download manually, run this command in your terminal:")
+            print(' '.join(cmd))
+            raise
         except Exception as e:
             print(f"[aria2] Failed to start: {e}")
             raise
