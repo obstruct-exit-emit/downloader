@@ -1,6 +1,45 @@
 # CLI entry point using argparse (MVP)
 import argparse
+import sys
 from downloader.core.manager import DownloadManager
+
+
+def _install_portable_aria2():
+    """Download and place a portable aria2c.exe into the project tree."""
+    import urllib.request
+    import zipfile
+    import shutil
+    from pathlib import Path
+    from downloader.core.utils import PROJECT_ROOT
+
+    aria_url = "https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip"
+    target_dir = Path(PROJECT_ROOT) / "downloader"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    archive_path = target_dir / "aria2_portable.zip"
+    extract_dir = target_dir / "aria2_portable_tmp"
+
+    try:
+        print(f"Downloading aria2 bundle from {aria_url} ...")
+        urllib.request.urlretrieve(aria_url, archive_path)
+        if extract_dir.exists():
+            shutil.rmtree(extract_dir)
+        with zipfile.ZipFile(archive_path, "r") as zf:
+            zf.extractall(extract_dir)
+        candidates = list(extract_dir.glob("**/aria2c.exe"))
+        if not candidates:
+            print("Could not find aria2c.exe in the downloaded archive.")
+            return
+        dest = target_dir / "aria2c.exe"
+        shutil.copy2(candidates[0], dest)
+        print(f"aria2c.exe placed at {dest}")
+    except Exception as exc:
+        print(f"Failed to download or extract aria2: {exc}")
+    finally:
+        try:
+            archive_path.unlink()
+        except Exception:
+            pass
+        shutil.rmtree(extract_dir, ignore_errors=True)
 
 def main():
     parser = argparse.ArgumentParser(description="Cross-platform download utility")
@@ -14,9 +53,13 @@ def main():
 
 
     # Pause/resume/remove
-    for cmd in ["pause", "resume", "remove", "status"]:
+    for cmd in ["pause", "resume", "remove"]:
         p = subparsers.add_parser(cmd, help=f"{cmd.capitalize()} a download")
-        p.add_argument("id", nargs="?", help="Download ID")
+        p.add_argument("id", help="Download ID")
+
+    # Status (single or all)
+    status_parser = subparsers.add_parser("status", help="Show status for a download or all")
+    status_parser.add_argument("id", nargs="?", help="Download ID (optional)")
     # Query aria2 download progress by GID
     progress_parser = subparsers.add_parser("aria2-progress", help="Show progress for aria2 download by GID")
     progress_parser.add_argument("gid", help="aria2 GID")
@@ -35,11 +78,24 @@ def main():
 
     if args.command == "add":
         manager.add(args.url, backend=args.backend)
+    elif args.command == "pause":
+        manager.pause(args.id)
+    elif args.command == "resume":
+        manager.resume(args.id)
+    elif args.command == "remove":
+        manager.remove(args.id)
+    elif args.command == "status":
+        manager.status(args.id)
     elif args.command == "list":
         manager.refresh()
         manager.status()
+    elif args.command == "get-aria2":
+        if sys.platform != "win32":
+            print("get-aria2 is currently supported on Windows only.")
+        else:
+            _install_portable_aria2()
     elif args.command == "get-mega":
-        import os, sys, urllib.request, subprocess, shutil
+        import os, urllib.request, subprocess, shutil
         from pathlib import Path
         from downloader.core.utils import PROJECT_ROOT
 
