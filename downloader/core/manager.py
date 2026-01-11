@@ -3,7 +3,6 @@
 from .aria2_backend import Aria2Backend, DEFAULT_RPC_SECRET
 from .mega_backend import MegaBackend
 from .persistence import Persistence
-from .utils import ensure_download_dir
 import re
 import os
 
@@ -53,15 +52,6 @@ class DownloadManager:
                 else:
                     job['status'] = 'started'
                     print(f"Added download {download_id} ({url}) using {job['backend']} (GID: {job['gid']})")
-                    # If aria2 immediately reports a socket/permission error, fall back to direct download
-                    if getattr(b, 'allow_direct_fallback', False):
-                        status = b.get_status(job['gid'])
-                        err_msg = (status or {}).get('errorMessage') if isinstance(status, dict) else None
-                        if err_msg and 'forbidden by its access permissions' in err_msg:
-                            fallback_gid = b._direct_download(url, os.fspath(ensure_download_dir()))
-                            job['gid'] = fallback_gid
-                            job['status'] = 'completed'
-                            print(f"aria2 RPC blocked; completed via direct fallback (GID: {job['gid']}).")
             elif result and hasattr(result, 'pid'):
                 job['pid'] = result.pid
                 job['status'] = 'started'
@@ -147,20 +137,6 @@ class DownloadManager:
         for job in jobs:
             gid_part = f" GID={job['gid']}" if job.get('gid') else ''
             pid_part = f" PID={job['pid']}" if job.get('pid') else ''
-            # For aria2 jobs with a GID, try to detect permission failures and fall back to direct download once
-            if job.get('gid') and 'aria2' in str(job.get('backend')).lower() and job['gid'] != 'direct-download' and getattr(self.aria2, 'allow_direct_fallback', False):
-                status = self.aria2.get_status(job['gid'])
-                if status and status.get('status') == 'error':
-                    err = status.get('errorMessage') or ''
-                    if 'forbidden by its access permissions' in err:
-                        try:
-                            fallback_gid = self.aria2._direct_download(job['url'], os.fspath(ensure_download_dir()))
-                            job['gid'] = fallback_gid
-                            job['status'] = 'completed'
-                            self.persistence.save(self.queue, self.history)
-                            gid_part = f" GID={job['gid']}"
-                        except Exception:
-                            pass
             print(f"{job['id']}: {job['url']} [{job['backend']}] {job['status']}{gid_part}{pid_part}")
 
     def refresh(self):

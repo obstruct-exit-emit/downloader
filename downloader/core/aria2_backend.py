@@ -1,21 +1,17 @@
-# aria2 backend implementation (stub)
-import subprocess
-import sys
+# aria2 backend implementation
 import os
-import urllib.request
-import urllib.parse
-import shutil
+import json
+import time
+import ssl
 import socket
+import shutil
+import subprocess
+import urllib.error
+import urllib.parse
+import urllib.request
+from .utils import ensure_download_dir, PROJECT_ROOT
 
 DEFAULT_RPC_SECRET = "secret123"
-
-
-import json
-import urllib.request
-import time
-import urllib.error
-import ssl
-from .utils import ensure_download_dir, DOWNLOADS_DIR, PROJECT_ROOT
 
 class Aria2Backend:
     def __init__(self, binary_path=None, rpc_port=6800, rpc_secret=DEFAULT_RPC_SECRET, allow_direct_fallback=None):

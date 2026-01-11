@@ -54,8 +54,6 @@ def main():
     add_parser.add_argument("url", help="URL to download")
     add_parser.add_argument("--backend", help="Force backend (aria2, mega)")
 
-
-
     # Pause/resume/remove
     for cmd in ["pause", "resume", "remove"]:
         p = subparsers.add_parser(cmd, help=f"{cmd.capitalize()} a download")

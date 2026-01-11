@@ -63,14 +63,15 @@ Run `python -m downloader.cli --help` for the latest options and descriptions.
 
 ## Optional direct-download fallback
 - Enable per run with CLI: `--aria2-direct-fallback` (or disable explicitly with `--no-aria2-direct-fallback`).
-- Or set environment variable `ARIA2_DIRECT_FALLBACK=1` (true/yes/on) to allow synchronous direct download when aria2 RPC fails due to socket/firewall restrictions. Default is disabled.
-- When enabled, the manager may complete a job via direct download and mark it as `completed` with `GID=direct-download`.
+- Or set environment variable `ARIA2_DIRECT_FALLBACK=1` (true/yes/on) to allow synchronous direct download when aria2 RPC fails to add a job (e.g., socket/firewall issues). Default is disabled.
+- When enabled and RPC add fails, the CLI will download directly and mark the job `completed` with `GID=direct-download`.
 
 ## Backend notes
 - aria2
 	- Uses RPC on `http://localhost:6800/jsonrpc` with secret `secret123` by default.
 	- CLI auto-starts an aria2 RPC daemon if not already reachable and points downloads to `downloads/`.
 	- Progress helpers: `aria2-progress` and `aria2-list` call RPC directly.
+	- RPC startup will retry alternate local ports (6800, 6880, 6999, then ephemeral) if binding/auth fails.
 - MEGAcmd
 	- Uses `mega-get` (or the `.bat` wrapper) for downloads.
 	- Authenticate once with `mega-login <email> <password>` using the bundled shell if needed; credentials are managed by MEGAcmd.
