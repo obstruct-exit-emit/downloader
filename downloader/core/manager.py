@@ -133,3 +133,26 @@ class DownloadManager:
             gid_part = f" GID={job['gid']}" if job.get('gid') else ''
             pid_part = f" PID={job['pid']}" if job.get('pid') else ''
             print(f"{job['id']}: {job['url']} [{job['backend']}] {job['status']}{gid_part}{pid_part}")
+
+    def refresh(self):
+        """Refresh job statuses for simple backends (mega: mark complete if process exited)."""
+        changed = False
+        for job in self.queue:
+            if job['backend'].lower() == 'mega' and job.get('status') == 'started':
+                pid = job.get('pid')
+                if pid:
+                    try:
+                        import psutil  # optional dependency
+                        if not psutil.pid_exists(pid):
+                            job['status'] = 'completed'
+                            changed = True
+                    except ImportError:
+                        # Fallback: if pid not found via OS
+                        try:
+                            import os, signal
+                            os.kill(pid, 0)
+                        except OSError:
+                            job['status'] = 'completed'
+                            changed = True
+        if changed:
+            self.persistence.save(self.queue, self.history)
