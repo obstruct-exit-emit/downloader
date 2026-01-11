@@ -6,6 +6,7 @@ Command-line download helper for aria2 and MEGAcmd with portable binaries, queue
 - Add, pause, resume, remove, and inspect downloads from a single CLI.
 - Auto-select backend: HTTP/HTTPS defaults to aria2; Mega links use MEGAcmd (override with `--backend`).
 - Portable binaries: `get-aria2` and `get-mega` fetch Windows-ready executables into the repo tree.
+- Resilient aria2: RPC auto-start with port retry; auto-falls back to standalone aria2c (no RPC) when sockets are blocked.
 - Persistent queue: `.downloader_state.json` keeps IDs/history across runs.
 
 ## Prerequisites
@@ -53,7 +54,7 @@ python -m downloader.cli remove <id>
 - `config show` — print current stored settings (aria2/Mega); secrets are masked.
 - `config aria2 [--rpc-secret ...] [--rpc-port ...]` — set aria2 RPC secret/port.
 - `config mega [--email ...] [--password ...]` — set Mega credentials.
- - `--aria2-direct-fallback / --no-aria2-direct-fallback` — global flags to enable/disable direct download fallback (defaults to env/disabled).
+ - `--aria2-direct-fallback / --no-aria2-direct-fallback` — global flags to enable/disable direct download fallback (defaults to env/disabled). Direct fallback is now the last resort; standalone aria2c is preferred when RPC sockets are blocked.
 
 Run `python -m downloader.cli --help` for the latest options and descriptions.
 
@@ -65,23 +66,23 @@ Run `python -m downloader.cli --help` for the latest options and descriptions.
 - Portable 7-Zip (Windows): `downloader/7zip_portable/7zr.exe` after `get-7zip`.
 - Config file: `.downloader_config.json` in the user config directory if available (falls back to project root) for aria2 RPC secret/port and Mega credentials; `config show` masks secrets. Port is validated (1-65535) on set.
 
-## Optional direct-download fallback
-- Enable per run with CLI: `--aria2-direct-fallback` (or disable explicitly with `--no-aria2-direct-fallback`).
-- Or set environment variable `ARIA2_DIRECT_FALLBACK=1` (true/yes/on) to allow synchronous direct download when aria2 RPC fails to add a job (e.g., socket/firewall issues). Default is disabled.
-- When enabled and RPC add fails, the CLI will download directly and mark the job `completed` with `GID=direct-download`.
+## Fallback behavior
+- Default flow: start/connect to aria2 RPC, trying ports 6800, 6880, 6999, then an ephemeral port.
+- If RPC binding or calls fail with socket permission errors (e.g., WinError 10013), the CLI automatically switches to standalone aria2c (no RPC) and continues the download, tracking it by PID.
+- Optional direct-download fallback: enable per run with `--aria2-direct-fallback` or via env `ARIA2_DIRECT_FALLBACK=1` (true/yes/on). This is only used when both RPC and standalone aria2c are unavailable. Jobs completed this way show `GID=direct-download`.
 
 ## Backend notes
 - aria2
 	- Uses RPC on `http://localhost:6800/jsonrpc` with secret `secret123` by default.
 	- CLI auto-starts an aria2 RPC daemon if not already reachable and points downloads to `downloads/`.
 	- Progress helpers: `aria2-progress` and `aria2-list` call RPC directly.
-	- RPC startup will retry alternate local ports (6800, 6880, 6999, then ephemeral) if binding/auth fails.
+	- RPC startup will retry alternate local ports (6800, 6880, 6999, then ephemeral) if binding/auth fails; if sockets are blocked by permissions, the CLI falls back to standalone aria2c (no RPC).
 - MEGAcmd
 	- Uses `mega-get` (or the `.bat` wrapper) for downloads.
 	- Authenticate once with `mega-login <email> <password>` using the bundled shell if needed; credentials are managed by MEGAcmd.
 
 ## Troubleshooting
-- aria2 RPC not reachable: ensure port 6800 is free; rerun `get-aria2` to refresh the binary; delete any stray aria2 processes and retry.
+- aria2 RPC not reachable: ensure port 6800 is free. The CLI will auto-try alternate ports; if sockets are blocked, it will switch to standalone aria2c. If both fail, rerun `get-aria2`, check firewall rules, or run with `--aria2-direct-fallback` as a last resort.
 - Mega commands fail: open `downloader/mega_portable/MEGAcmd/mega-login.bat` (or run via cmd) to sign in; verify files exist under `downloader/mega_portable/MEGAcmd`.
 - Reset state: stop downloads, then delete `.downloader_state.json` and re-run commands to start fresh.
 
