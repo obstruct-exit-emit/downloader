@@ -15,7 +15,7 @@
 - Backend selection per download **(Done: auto + --backend override)**
 - Error handling and retry logic **(Partial: fallback direct-download optional, port retry)**
 - Download history/log **(Partial: queue/history persisted; no reporting UI)**
-- Settings for backend configuration (e.g., aria2 RPC, Mega credentials) **(Not started)**
+- Settings for backend configuration (e.g., aria2 RPC, Mega credentials) **(Done: config CLI + .downloader_config.json for aria2 secret/port and Mega creds)**
 
 ### UI/UX Expectations
 - Simple, modern, and intuitive interface
@@ -52,7 +52,7 @@
 - Pause/resume/remove: `downloader pause|resume|remove <id>` **(Done)**
 - View progress: `downloader status <id>` **(Done)**
 - Watch live progress: `downloader status <id> --follow` or `downloader watch` **(Not started)**
-- Configure backends: `downloader config [aria2|mega] [options]`; show current config: `downloader config show` **(Not started)**
+- Configure backends: `downloader config [aria2|mega] [options]`; show current config: `downloader config show` **(Done: config CLI implemented)**
 
 ### Future GUI User Flow (to be designed)
 

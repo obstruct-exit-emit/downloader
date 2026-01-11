@@ -3,12 +3,17 @@
 from .aria2_backend import Aria2Backend, DEFAULT_RPC_SECRET
 from .mega_backend import MegaBackend
 from .persistence import Persistence
+from .config import Config
 import re
 import os
 
 class DownloadManager:
-    def __init__(self, aria2_direct_fallback=None):
-        self.aria2 = Aria2Backend(rpc_secret=DEFAULT_RPC_SECRET, allow_direct_fallback=aria2_direct_fallback)
+    def __init__(self, aria2_direct_fallback=None, config: Config | None = None):
+        self.config = config or Config()
+        aria2_cfg = self.config.get_aria2()
+        rpc_secret = aria2_cfg.get("rpc_secret", DEFAULT_RPC_SECRET)
+        rpc_port = aria2_cfg.get("rpc_port", 6800)
+        self.aria2 = Aria2Backend(rpc_secret=rpc_secret, rpc_port=rpc_port, allow_direct_fallback=aria2_direct_fallback)
         self.mega = MegaBackend()
         self.persistence = Persistence()
         data = self.persistence.load()

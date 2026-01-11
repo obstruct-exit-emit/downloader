@@ -1,7 +1,9 @@
 # CLI entry point using argparse (MVP)
 import argparse
 import sys
+import json
 from downloader.core.manager import DownloadManager
+from downloader.core.config import Config
 
 
 def _install_portable_aria2():
@@ -69,6 +71,19 @@ def main():
     subparsers.add_parser("aria2-list", help="List all active aria2 download GIDs and status")
     # List downloads
     subparsers.add_parser("list", help="List all downloads")
+    # Config commands
+    config_parser = subparsers.add_parser("config", help="View or set backend configuration")
+    config_sub = config_parser.add_subparsers(dest="config_command")
+
+    cfg_show = config_sub.add_parser("show", help="Show current configuration")
+
+    cfg_aria2 = config_sub.add_parser("aria2", help="Set aria2 settings")
+    cfg_aria2.add_argument("--rpc-secret", dest="rpc_secret", help="Set aria2 RPC secret")
+    cfg_aria2.add_argument("--rpc-port", dest="rpc_port", type=int, help="Set aria2 RPC port")
+
+    cfg_mega = config_sub.add_parser("mega", help="Set Mega credentials")
+    cfg_mega.add_argument("--email", dest="email", help="Set Mega email")
+    cfg_mega.add_argument("--password", dest="password", help="Set Mega password")
     # Download portable aria2
     subparsers.add_parser("get-aria2", help="Download portable aria2c.exe for Windows into project directory")
     # Download portable MegaCMD
@@ -78,7 +93,8 @@ def main():
 
 
     args = parser.parse_args()
-    manager = DownloadManager(aria2_direct_fallback=args.aria2_direct_fallback)
+    config = Config()
+    manager = DownloadManager(aria2_direct_fallback=args.aria2_direct_fallback, config=config)
 
     if args.command == "add":
         manager.add(args.url, backend=args.backend)
@@ -167,6 +183,32 @@ def main():
         except Exception:
             pass
         print("Done.")
+    elif args.command == "config":
+        if args.config_command == "show":
+            data = config.data.copy()
+            mega = data.get("mega") or {}
+            if "password" in mega:
+                mega = mega.copy()
+                mega["password"] = "***"
+                data["mega"] = mega
+            aria2_cfg = data.get("aria2") or {}
+            if "rpc_secret" in aria2_cfg:
+                aria2_cfg = aria2_cfg.copy()
+                aria2_cfg["rpc_secret"] = "***"
+                data["aria2"] = aria2_cfg
+            print(json.dumps(data, indent=2))
+        elif args.config_command == "aria2":
+            try:
+                config.set_aria2(rpc_secret=args.rpc_secret, rpc_port=args.rpc_port)
+                print("Updated aria2 config.")
+            except ValueError as ve:
+                print(f"Invalid aria2 config: {ve}")
+        elif args.config_command == "mega":
+            config.set_mega(email=args.email, password=args.password)
+            print("Updated Mega config.")
+        else:
+            config_parser = [sp for sp in subparsers.choices.values() if sp.prog.endswith('config')]
+            parser.print_help()
     elif args.command == "get-7zip":
         import os, urllib.request, shutil
         from pathlib import Path
