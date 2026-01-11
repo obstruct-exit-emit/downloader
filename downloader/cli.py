@@ -5,7 +5,7 @@ from downloader.core.manager import DownloadManager
 
 
 def _install_portable_aria2():
-    """Download and place a portable aria2c.exe into the project tree."""
+    """Download and place a portable aria2c.exe into the aria2_portable folder."""
     import urllib.request
     import zipfile
     import shutil
@@ -13,10 +13,10 @@ def _install_portable_aria2():
     from downloader.core.utils import PROJECT_ROOT
 
     aria_url = "https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip"
-    target_dir = Path(PROJECT_ROOT) / "downloader"
-    target_dir.mkdir(parents=True, exist_ok=True)
-    archive_path = target_dir / "aria2_portable.zip"
-    extract_dir = target_dir / "aria2_portable_tmp"
+    portable_dir = Path(PROJECT_ROOT) / "downloader" / "aria2_portable"
+    portable_dir.mkdir(parents=True, exist_ok=True)
+    archive_path = portable_dir / "aria2_portable.zip"
+    extract_dir = portable_dir / "aria2_portable_tmp"
 
     try:
         print(f"Downloading aria2 bundle from {aria_url} ...")
@@ -29,7 +29,7 @@ def _install_portable_aria2():
         if not candidates:
             print("Could not find aria2c.exe in the downloaded archive.")
             return
-        dest = target_dir / "aria2c.exe"
+        dest = portable_dir / "aria2c.exe"
         shutil.copy2(candidates[0], dest)
         print(f"aria2c.exe placed at {dest}")
     except Exception as exc:
@@ -43,6 +43,10 @@ def _install_portable_aria2():
 
 def main():
     parser = argparse.ArgumentParser(description="Cross-platform download utility")
+    fallback_group = parser.add_mutually_exclusive_group()
+    fallback_group.add_argument("--aria2-direct-fallback", dest="aria2_direct_fallback", action="store_true", help="Enable direct download fallback when aria2 RPC is blocked")
+    fallback_group.add_argument("--no-aria2-direct-fallback", dest="aria2_direct_fallback", action="store_false", help="Disable direct download fallback (default if env not set)")
+    parser.set_defaults(aria2_direct_fallback=None)
     subparsers = parser.add_subparsers(dest="command")
 
     # Add download
@@ -74,7 +78,7 @@ def main():
 
 
     args = parser.parse_args()
-    manager = DownloadManager()
+    manager = DownloadManager(aria2_direct_fallback=args.aria2_direct_fallback)
 
     if args.command == "add":
         manager.add(args.url, backend=args.backend)

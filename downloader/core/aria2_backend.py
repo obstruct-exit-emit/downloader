@@ -2,6 +2,10 @@
 import subprocess
 import sys
 import os
+import urllib.request
+import urllib.parse
+import shutil
+import socket
 
 DEFAULT_RPC_SECRET = "secret123"
 
@@ -14,12 +18,16 @@ import ssl
 from .utils import ensure_download_dir, DOWNLOADS_DIR, PROJECT_ROOT
 
 class Aria2Backend:
-    def __init__(self, binary_path=None, rpc_port=6800, rpc_secret=DEFAULT_RPC_SECRET):
+    def __init__(self, binary_path=None, rpc_port=6800, rpc_secret=DEFAULT_RPC_SECRET, allow_direct_fallback=None):
         self.binary_path = binary_path or self._find_aria2c()
         self.rpc_port = rpc_port
-        self.rpc_url = f'http://localhost:{self.rpc_port}/jsonrpc'
+        self.rpc_url = f'http://localhost:{self.rpc_port}/jsonrpc' if rpc_port else None
         self.rpc_secret = rpc_secret
         self.aria2c_proc = None
+        if allow_direct_fallback is None:
+            env_val = os.getenv("ARIA2_DIRECT_FALLBACK", "").lower()
+            allow_direct_fallback = env_val in ("1", "true", "yes", "on")
+        self.allow_direct_fallback = bool(allow_direct_fallback)
 
     def _rpc_ping(self):
         payload = {
@@ -43,26 +51,53 @@ class Aria2Backend:
         except Exception:
             return False
 
+    def _candidate_ports(self):
+        ports = []
+        if self.rpc_port:
+            ports.append(self.rpc_port)
+        # Common alternates
+        ports.extend([6800, 6880, 6999])
+        # Last resort: find a free ephemeral port
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("localhost", 0))
+                ports.append(s.getsockname()[1])
+        except Exception:
+            pass
+        # Remove duplicates while preserving order
+        deduped = []
+        for p in ports:
+            if p not in deduped:
+                deduped.append(p)
+        return deduped
+
     def _ensure_rpc(self, downloads_dir):
-        """Ensure an aria2 RPC server is reachable; start one if needed."""
+        """Ensure an aria2 RPC server is reachable; start one if needed, trying alternate ports on permission errors."""
         if not os.path.isfile(self.binary_path):
             raise RuntimeError(f"aria2c binary not found at {self.binary_path}")
-        try:
-            if self._rpc_ping():
-                return
-        except RuntimeError:
-            # Secret mismatch but server is up; surface immediately
-            raise
 
-        # If we think we have a child process but it is dead/unreachable, terminate it and restart
-        if self.aria2c_proc and self.aria2c_proc.poll() is None:
+        ports_to_try = self._candidate_ports()
+        last_error = None
+
+        for port in ports_to_try:
+            self.rpc_port = port
+            self.rpc_url = f'http://localhost:{self.rpc_port}/jsonrpc'
             try:
-                self.aria2c_proc.terminate()
-            except Exception:
-                pass
-            self.aria2c_proc = None
+                if self._rpc_ping():
+                    return
+            except RuntimeError as auth_err:
+                # Port in use with different secret; try another port
+                last_error = auth_err
+                continue
 
-        if self.aria2c_proc is None or self.aria2c_proc.poll() is not None:
+            # If child process exists, terminate before retrying
+            if self.aria2c_proc and self.aria2c_proc.poll() is None:
+                try:
+                    self.aria2c_proc.terminate()
+                except Exception:
+                    pass
+                self.aria2c_proc = None
+
             rpc_cmd = [
                 self.binary_path,
                 '--enable-rpc',
@@ -78,23 +113,30 @@ class Aria2Backend:
                 try:
                     if self._rpc_ping():
                         return
-                except RuntimeError:
-                    raise
+                except RuntimeError as auth_err:
+                    last_error = auth_err
+                    break
                 except Exception:
                     time.sleep(0.5)
-            # If we reach here, startup failed; include any aria2 output to help troubleshoot
+            # If process died, capture output and try next port
             if self.aria2c_proc.poll() is not None:
                 try:
                     output = (self.aria2c_proc.stdout.read() or "").strip()
                 except Exception:
                     output = ""
-                raise RuntimeError(f"aria2 RPC failed to start (exit {self.aria2c_proc.returncode}). Output: {output}")
-        raise RuntimeError("aria2 RPC server not reachable")
+                last_error = RuntimeError(f"aria2 RPC failed to start on port {self.rpc_port} (exit {self.aria2c_proc.returncode}). Output: {output}")
+                self.aria2c_proc = None
+                continue
+
+        if last_error:
+            raise last_error
+        raise RuntimeError("aria2 RPC server not reachable after trying alternate ports")
 
     def _find_aria2c(self):
-        # Prefer bundled binary in project tree, then system PATH
+        # Prefer portable binary in aria2_portable, then project tree, then PATH
         exe_name = 'aria2c.exe' if os.name == 'nt' else 'aria2c'
         candidates = [
+            os.fspath(PROJECT_ROOT / 'downloader' / 'aria2_portable' / exe_name),
             os.fspath(PROJECT_ROOT / 'downloader' / exe_name),
             os.fspath(PROJECT_ROOT / exe_name),
         ]
@@ -167,7 +209,27 @@ class Aria2Backend:
                 return gid
         except Exception as e:
             print(f"[aria2] Failed to add download via RPC: {e}")
+            if self.allow_direct_fallback:
+                try:
+                    return self._direct_download(url, downloads_dir)
+                except Exception as fallback_err:
+                    print(f"[aria2] Fallback direct download failed: {fallback_err}")
             raise
+
+    def _direct_download(self, url, downloads_dir):
+        """Synchronous direct download as a fallback when aria2 RPC cannot start or connect."""
+        parsed = urllib.parse.urlparse(url)
+        filename = os.path.basename(parsed.path) or "download.bin"
+        dest = os.path.join(downloads_dir, filename)
+        # Avoid overwriting an existing file with the same name
+        if os.path.exists(dest):
+            base, ext = os.path.splitext(filename)
+            dest = os.path.join(downloads_dir, f"{base}_1{ext}")
+        print(f"[aria2] Falling back to direct download -> {dest}")
+        with urllib.request.urlopen(url) as resp, open(dest, "wb") as f:
+            shutil.copyfileobj(resp, f)
+        print(f"[aria2] Direct download completed: {dest}")
+        return "direct-download"
 
     def get_status(self, gid):
         # Query aria2c RPC for download status

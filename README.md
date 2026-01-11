@@ -47,16 +47,22 @@ python -m downloader.cli remove <id>
 - `list` — refresh lightweight status and print the queue (same output as `status`).
 - `aria2-progress <gid>` — query aria2 RPC for a specific GID’s progress.
 - `aria2-list` — list active aria2 downloads via RPC.
-- `get-aria2` — download and place `aria2c.exe` under `downloader/` (Windows only).
+- `get-aria2` — download and place `aria2c.exe` under `downloader/aria2_portable/` (Windows only).
 - `get-mega` — download MEGAcmd installer, copy binaries to `downloader/mega_portable/MEGAcmd`, and uninstall the system copy to stay portable.
+ - `--aria2-direct-fallback / --no-aria2-direct-fallback` — global flags to enable/disable direct download fallback (defaults to env/disabled).
 
 Run `python -m downloader.cli --help` for the latest options and descriptions.
 
 ## Downloads, state, and locations
 - Download directory: `downloads/` at the project root (auto-created).
 - State file: `.downloader_state.json` at the project root (queue + history).
-- Portable aria2 binary (Windows): `downloader/aria2c.exe` after `get-aria2`.
+- Portable aria2 binary (Windows): `downloader/aria2_portable/aria2c.exe` after `get-aria2`.
 - Portable MEGAcmd bundle (Windows): `downloader/mega_portable/MEGAcmd/` after `get-mega`.
+
+## Optional direct-download fallback
+- Enable per run with CLI: `--aria2-direct-fallback` (or disable explicitly with `--no-aria2-direct-fallback`).
+- Or set environment variable `ARIA2_DIRECT_FALLBACK=1` (true/yes/on) to allow synchronous direct download when aria2 RPC fails due to socket/firewall restrictions. Default is disabled.
+- When enabled, the manager may complete a job via direct download and mark it as `completed` with `GID=direct-download`.
 
 ## Backend notes
 - aria2
