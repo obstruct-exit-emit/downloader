@@ -4,6 +4,7 @@ from .aria2_backend import Aria2Backend, DEFAULT_RPC_SECRET
 from .mega_backend import MegaBackend
 from .persistence import Persistence
 from .config import Config
+from .utils import ensure_download_dir
 import re
 import os
 
@@ -142,27 +143,62 @@ class DownloadManager:
         for job in jobs:
             gid_part = f" GID={job['gid']}" if job.get('gid') else ''
             pid_part = f" PID={job['pid']}" if job.get('pid') else ''
+            if job.get('gid') and 'aria2' in str(job.get('backend')).lower() and job['gid'] != 'direct-download':
+                status = self.aria2.get_status(job['gid'])
+                if status and status.get('status') == 'error':
+                    err = status.get('errorMessage') or ''
+                    if getattr(self.aria2, '_is_socket_permission_error', lambda _x: False)(err):
+                        try:
+                            proc = self.aria2._spawn_cli_download(job['url'], os.fspath(ensure_download_dir()), return_proc=True)
+                            job['pid'] = getattr(proc, 'pid', None)
+                            job['gid'] = None
+                            job['status'] = 'started'
+                            self.persistence.save(self.queue, self.history)
+                            gid_part = ''
+                            pid_part = f" PID={job['pid']}" if job.get('pid') else ''
+                        except Exception:
+                            if getattr(self.aria2, 'allow_direct_fallback', False):
+                                try:
+                                    fallback_gid = self.aria2._direct_download(job['url'], os.fspath(ensure_download_dir()))
+                                    job['gid'] = fallback_gid
+                                    job['status'] = 'completed'
+                                    self.persistence.save(self.queue, self.history)
+                                    gid_part = f" GID={job['gid']}"
+                                except Exception:
+                                    pass
+                    elif getattr(self.aria2, 'allow_direct_fallback', False) and 'forbidden by its access permissions' in err:
+                        try:
+                            fallback_gid = self.aria2._direct_download(job['url'], os.fspath(ensure_download_dir()))
+                            job['gid'] = fallback_gid
+                            job['status'] = 'completed'
+                            self.persistence.save(self.queue, self.history)
+                            gid_part = f" GID={job['gid']}"
+                        except Exception:
+                            pass
             print(f"{job['id']}: {job['url']} [{job['backend']}] {job['status']}{gid_part}{pid_part}")
 
     def refresh(self):
-        """Refresh job statuses for simple backends (mega: mark complete if process exited)."""
+        """Refresh job statuses for process-based backends (mega/aria2 CLI)."""
         changed = False
         for job in self.queue:
-            if job['backend'].lower() == 'mega' and job.get('status') == 'started':
-                pid = job.get('pid')
-                if pid:
+            if job.get('status') == 'started' and job.get('pid'):
+                backend_name = job.get('backend', '').lower()
+                pid = job['pid']
+                is_process_backend = backend_name.startswith('aria2') or backend_name == 'mega'
+                if not is_process_backend:
+                    continue
+                try:
+                    import psutil  # optional dependency
+                    if not psutil.pid_exists(pid):
+                        job['status'] = 'completed'
+                        changed = True
+                except ImportError:
+                    # Fallback: if pid not found via OS
                     try:
-                        import psutil  # optional dependency
-                        if not psutil.pid_exists(pid):
-                            job['status'] = 'completed'
-                            changed = True
-                    except ImportError:
-                        # Fallback: if pid not found via OS
-                        try:
-                            import os, signal
-                            os.kill(pid, 0)
-                        except OSError:
-                            job['status'] = 'completed'
-                            changed = True
+                        import os, signal
+                        os.kill(pid, 0)
+                    except OSError:
+                        job['status'] = 'completed'
+                        changed = True
         if changed:
             self.persistence.save(self.queue, self.history)

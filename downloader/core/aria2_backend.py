@@ -25,6 +25,39 @@ class Aria2Backend:
             allow_direct_fallback = env_val in ("1", "true", "yes", "on")
         self.allow_direct_fallback = bool(allow_direct_fallback)
 
+    def _is_socket_permission_error(self, err):
+        msg = str(err or "").lower()
+        return (
+            "forbidden by its access permissions" in msg
+            or "winerror 10013" in msg
+            or "error 10013" in msg
+        )
+
+    def _spawn_cli_download(self, url, downloads_dir, options=None, return_proc=False):
+        """Fallback to standalone aria2c (no RPC) when RPC sockets are blocked."""
+        options = options or {}
+        args = [
+            self.binary_path,
+            "--check-certificate=false",
+            "--enable-rpc=false",
+            "-d",
+            downloads_dir,
+        ]
+        out_name = options.get("out") or options.get("filename")
+        if out_name:
+            args += ["-o", out_name]
+        args.append(url)
+
+        try:
+            proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, text=True)
+            print("[aria2] Started standalone aria2c (no RPC) due to socket permissions block.")
+            return proc if return_proc else proc.pid
+        except Exception as e:
+            print(f"[aria2] Standalone aria2c failed: {e}")
+            if self.allow_direct_fallback:
+                return self._direct_download(url, downloads_dir)
+            raise
+
     def _rpc_ping(self):
         payload = {
             "jsonrpc": "2.0",
@@ -184,12 +217,20 @@ class Aria2Backend:
         # Basic reachability check before spinning up aria2/RPC
         self._precheck_url(url)
         downloads_dir = os.fspath(ensure_download_dir())
-        # Ensure aria2 RPC is running (start if not)
-        self._ensure_rpc(downloads_dir)
-        # Add download via RPC, specifying the download directory per-download
         options = (options or {}).copy()
         options.setdefault("dir", downloads_dir)
         options.setdefault("check-certificate", "false")
+
+        try:
+            # Ensure aria2 RPC is running (start if not)
+            self._ensure_rpc(downloads_dir)
+        except Exception as ensure_err:
+            if self._is_socket_permission_error(ensure_err):
+                print("[aria2] RPC start blocked by socket permissions; switching to standalone aria2c.")
+                return self._spawn_cli_download(url, downloads_dir, options, return_proc=return_proc)
+            raise
+
+        # Add download via RPC, specifying the download directory per-download
         payload = {
             "jsonrpc": "2.0",
             "id": "addUri",
@@ -202,9 +243,25 @@ class Aria2Backend:
                 result = json.loads(resp.read())
                 gid = result['result']
                 print(f"Added download (GID: {gid}) via aria2 RPC.")
+                # If RPC immediately reports a permission error, fall back to direct download when allowed
+                try:
+                    status = self.get_status(gid)
+                    err_msg = (status or {}).get('errorMessage') if isinstance(status, dict) else None
+                    if err_msg and self._is_socket_permission_error(err_msg):
+                        print("aria2 RPC blocked by socket permissions; switching to standalone aria2c.")
+                        return self._spawn_cli_download(url, downloads_dir, options, return_proc=return_proc)
+                    if self.allow_direct_fallback and err_msg and 'forbidden by its access permissions' in err_msg:
+                        print("aria2 RPC blocked by socket permissions; using direct download fallback.")
+                        return self._direct_download(url, downloads_dir)
+                except Exception:
+                    # ignore status probe failures
+                    pass
                 return gid
         except Exception as e:
             print(f"[aria2] Failed to add download via RPC: {e}")
+            if self._is_socket_permission_error(e):
+                print("[aria2] RPC call blocked by socket permissions; switching to standalone aria2c.")
+                return self._spawn_cli_download(url, downloads_dir, options, return_proc=return_proc)
             if self.allow_direct_fallback:
                 try:
                     return self._direct_download(url, downloads_dir)
