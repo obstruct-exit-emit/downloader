@@ -36,9 +36,13 @@ class Aria2Backend:
             raise
 
     def pause(self, download_id):
+        pass
 
     def resume(self, download_id):
+        pass
 
     def remove(self, download_id):
+        pass
 
     def status(self, download_id=None):
+        pass
