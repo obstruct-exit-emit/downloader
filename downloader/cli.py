@@ -75,6 +75,8 @@ def main():
     subparsers.add_parser("get-aria2", help="Download portable aria2c.exe for Windows into project directory")
     # Download portable MegaCMD
     subparsers.add_parser("get-mega", help="Download portable megacmd for Windows into project directory")
+    # Download portable 7-Zip (7zr.exe)
+    subparsers.add_parser("get-7zip", help="Download portable 7-Zip (7zr.exe) into project directory")
 
 
     args = parser.parse_args()
@@ -167,6 +169,26 @@ def main():
         except Exception:
             pass
         print("Done.")
+    elif args.command == "get-7zip":
+        import os, urllib.request, shutil
+        from pathlib import Path
+        from downloader.core.utils import PROJECT_ROOT
+
+        if sys.platform != "win32":
+            print("get-7zip is currently supported on Windows only.")
+            return
+
+        portable_dir = Path(PROJECT_ROOT) / "downloader" / "7zip_portable"
+        portable_dir.mkdir(parents=True, exist_ok=True)
+        target = portable_dir / "7zr.exe"
+        url = "https://www.7-zip.org/a/7zr.exe"
+
+        try:
+            print(f"Downloading 7zr.exe from {url} ...")
+            urllib.request.urlretrieve(url, target)
+            print(f"7zr.exe placed at {target}")
+        except Exception as e:
+            print(f"Failed to download 7zr.exe: {e}")
     # (Removed duplicate and obsolete code for get-aria2 and get-mega)
     elif args.command == "aria2-list":
         from downloader.core.aria2_backend import Aria2Backend, DEFAULT_RPC_SECRET

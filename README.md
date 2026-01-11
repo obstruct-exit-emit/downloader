@@ -49,6 +49,7 @@ python -m downloader.cli remove <id>
 - `aria2-list` — list active aria2 downloads via RPC.
 - `get-aria2` — download and place `aria2c.exe` under `downloader/aria2_portable/` (Windows only).
 - `get-mega` — download MEGAcmd installer, copy binaries to `downloader/mega_portable/MEGAcmd`, and uninstall the system copy to stay portable.
+ - `get-7zip` — download portable 7zr.exe to `downloader/7zip_portable/` (Windows only).
  - `--aria2-direct-fallback / --no-aria2-direct-fallback` — global flags to enable/disable direct download fallback (defaults to env/disabled).
 
 Run `python -m downloader.cli --help` for the latest options and descriptions.
@@ -58,6 +59,7 @@ Run `python -m downloader.cli --help` for the latest options and descriptions.
 - State file: `.downloader_state.json` at the project root (queue + history).
 - Portable aria2 binary (Windows): `downloader/aria2_portable/aria2c.exe` after `get-aria2`.
 - Portable MEGAcmd bundle (Windows): `downloader/mega_portable/MEGAcmd/` after `get-mega`.
+- Portable 7-Zip (Windows): `downloader/7zip_portable/7zr.exe` after `get-7zip`.
 
 ## Optional direct-download fallback
 - Enable per run with CLI: `--aria2-direct-fallback` (or disable explicitly with `--no-aria2-direct-fallback`).
