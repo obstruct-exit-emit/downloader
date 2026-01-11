@@ -1,13 +1,13 @@
 # Download manager: handles queue, state, and operations
 
-from .aria2_backend import Aria2Backend
+from .aria2_backend import Aria2Backend, DEFAULT_RPC_SECRET
 from .mega_backend import MegaBackend
 from .persistence import Persistence
 import re
 
 class DownloadManager:
     def __init__(self):
-        self.aria2 = Aria2Backend()
+        self.aria2 = Aria2Backend(rpc_secret=DEFAULT_RPC_SECRET)
         self.mega = MegaBackend()
         self.persistence = Persistence()
         data = self.persistence.load()
@@ -16,6 +16,7 @@ class DownloadManager:
 
     def _select_backend(self, url, backend=None):
         if backend:
+            backend = backend.lower()
             if backend == 'aria2':
                 return self.aria2
             elif backend == 'mega':
@@ -28,22 +29,31 @@ class DownloadManager:
     def add(self, url, backend=None, options=None):
         b = self._select_backend(url, backend)
         download_id = self.persistence.generate_id()
+        backend_name = backend or b.__class__.__name__
         job = {
             'id': download_id,
             'url': url,
-            'backend': backend or b.__class__.__name__,
+            'backend': backend_name,
             'status': 'queued',
-            'pid': None
+            'pid': None,
+            'gid': None
         }
         self.queue.append(job)
         self.persistence.save(self.queue, self.history)
         try:
-            # Start the process and store its PID
-            proc = b.add(url, options, return_proc=True)
-            if proc:
-                job['pid'] = proc.pid
+            # Start the process and store its PID or GID
+            result = b.add(url, options, return_proc=True)
+            if b.__class__.__name__.lower().startswith('aria2') and isinstance(result, str):
+                job['gid'] = result
                 job['status'] = 'started'
-            print(f"Added download {download_id} ({url}) using {job['backend']} (PID: {job['pid']})")
+                print(f"Added download {download_id} ({url}) using {job['backend']} (GID: {job['gid']})")
+            elif result and hasattr(result, 'pid'):
+                job['pid'] = result.pid
+                job['status'] = 'started'
+                print(f"Added download {download_id} ({url}) using {job['backend']} (PID: {job['pid']})")
+            else:
+                job['status'] = 'started'
+                print(f"Added download {download_id} ({url}) using {job['backend']}")
         except Exception as e:
             job['status'] = 'error'
             print(f"Failed to start download {download_id}: {e}")
@@ -116,5 +126,10 @@ class DownloadManager:
             jobs = [j for j in self.queue if j['id'] == download_id]
         else:
             jobs = self.queue
+        if not jobs:
+            print("No downloads yet. Use 'add <url>' to start one.")
+            return
         for job in jobs:
-            print(f"{job['id']}: {job['url']} [{job['backend']}] {job['status']}")
+            gid_part = f" GID={job['gid']}" if job.get('gid') else ''
+            pid_part = f" PID={job['pid']}" if job.get('pid') else ''
+            print(f"{job['id']}: {job['url']} [{job['backend']}] {job['status']}{gid_part}{pid_part}")

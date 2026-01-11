@@ -2,10 +2,12 @@
 import os
 import json
 import uuid
+from .utils import STATE_PATH
+
 
 class Persistence:
     def __init__(self, path=None):
-        self.path = path or os.path.join(os.path.expanduser('~'), '.downloader_queue.json')
+        self.path = os.fspath(path or STATE_PATH)
         self._ensure_file()
 
     def _ensure_file(self):
@@ -14,8 +16,12 @@ class Persistence:
                 json.dump({'queue': [], 'history': []}, f)
 
     def load(self):
-        with open(self.path, 'r') as f:
-            return json.load(f)
+        try:
+            with open(self.path, 'r') as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            self._ensure_file()
+            return {'queue': [], 'history': []}
 
     def save(self, queue, history):
         with open(self.path, 'w') as f:
