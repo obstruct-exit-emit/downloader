@@ -302,10 +302,38 @@ class Aria2Backend:
             return None
 
     def pause(self, download_id):
-        pass
+        gid = download_id
+        if not self.rpc_url:
+            raise RuntimeError("aria2 RPC not initialized")
+        payload = {
+            "jsonrpc": "2.0",
+            "id": "pause",
+            "method": "aria2.pause",
+            "params": [f"token:{self.rpc_secret}", gid]
+        }
+        try:
+            req = urllib.request.Request(self.rpc_url, data=json.dumps(payload).encode(), headers={'Content-Type': 'application/json'})
+            with urllib.request.urlopen(req) as resp:
+                json.loads(resp.read())
+        except Exception as e:
+            raise RuntimeError(f"Failed to pause GID {gid}: {e}")
 
     def resume(self, download_id):
-        pass
+        gid = download_id
+        if not self.rpc_url:
+            raise RuntimeError("aria2 RPC not initialized")
+        payload = {
+            "jsonrpc": "2.0",
+            "id": "resume",
+            "method": "aria2.unpause",
+            "params": [f"token:{self.rpc_secret}", gid]
+        }
+        try:
+            req = urllib.request.Request(self.rpc_url, data=json.dumps(payload).encode(), headers={'Content-Type': 'application/json'})
+            with urllib.request.urlopen(req) as resp:
+                json.loads(resp.read())
+        except Exception as e:
+            raise RuntimeError(f"Failed to resume GID {gid}: {e}")
 
     def remove(self, download_id):
         pass

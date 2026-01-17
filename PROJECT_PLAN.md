@@ -7,22 +7,28 @@
 - Mega (cloud storage and downloads) **(Done: portable fetch + basic add)**
 - (Optional: add more in future)
 
+
 ### Core Features
-- Add, pause, resume, and remove downloads **(Done in CLI/manager)**
+- Add, pause, resume, and remove downloads **(Done in CLI/manager; true pause/resume for aria2 RPC jobs and process-backed jobs)**
 - Download queue management **(Done: persisted queue/history file)**
-- Progress tracking and notifications **(Partial: aria2 progress via RPC; no notifications yet)**
+- Progress tracking and notifications **(Done: GUI progress bar, refresh button, CLI integration for all backends)**
 - Support for multiple simultaneous downloads **(Partial: aria2 supports concurrent RPC jobs)**
 - Backend selection per download **(Done: auto + --backend override)**
 - Error handling and retry logic **(Partial: fallback direct-download optional, port retry)**
 - Download history/log **(Partial: queue/history persisted; no reporting UI)**
 - Settings for backend configuration (e.g., aria2 RPC, Mega credentials) **(Done: config CLI + .downloader_config.json for aria2 secret/port and Mega creds)**
 
+
 ### UI/UX Expectations
 - Simple, modern, and intuitive interface
-- Add download via URL or file
-- View and manage active/completed downloads
-- Settings panel for backend configuration
+- Add download via URL (GUI implemented)
+- View progress in real time (GUI progress bar, refresh button)
+- View and manage active/completed downloads in a table (GUI implemented)
+- Pause/resume for aria2 RPC jobs and process-backed jobs (GUI implemented)
+- Remove jobs from list or list+delete file (GUI implemented)
+- Settings panel for backend configuration (future)
 - Cross-platform look and feel
+
 
 ### Platform Support
 - Windows
@@ -54,7 +60,15 @@
 - Watch live progress: `downloader status <id> --follow` or `downloader watch` **(Not started)**
 - Configure backends: `downloader config [aria2|mega] [options]`; show current config: `downloader config show` **(Done: config CLI implemented)**
 
-### Future GUI User Flow (to be designed)
+
+### GUI User Flow (Current)
+- Enter a download URL and click "Download"
+- View all downloads in a table with progress, status, backend, and controls
+- Pause/resume supported for aria2 RPC jobs and process-backed jobs
+- Remove jobs from the list, or remove and delete the downloaded file
+- Progress is tracked via state file and CLI integration
+- Auto-refresh updates the table every few seconds
+- Future: settings panel
 
 ---
 
@@ -105,7 +119,16 @@
 
 ---
 
-## 6. GUI Implementation (to be detailed)
+
+## 6. GUI Implementation
+- PyQt GUI implemented as a frontend for the CLI
+- Table view for all downloads with progress, status, backend, and controls
+- Pause/resume/remove for all supported jobs
+- Remove and delete file option
+- Progress bar and refresh button for all backends
+- Reads state file and uses CLI commands for real-time updates
+- Auto-refresh updates the table every few seconds
+- Future: settings panel
 
 ---
 

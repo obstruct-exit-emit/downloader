@@ -73,11 +73,23 @@ class DownloadManager:
 
     def pause(self, download_id):
         job = next((j for j in self.queue if j['id'] == download_id), None)
-        if job and job.get('pid'):
+        if not job:
+            print(f"Download {download_id} not found")
+            return
+        backend_name = str(job.get('backend', '')).lower()
+        # aria2 RPC (gid)
+        if job.get('gid') and 'aria2' in backend_name and job['gid'] != 'direct-download':
             try:
-                import os, sys
+                self.aria2.pause(job['gid'])
+                job['status'] = 'paused'
+                print(f"Paused download {download_id} (GID: {job['gid']})")
+            except Exception as e:
+                print(f"Failed to pause download {download_id}: {e}")
+        # Process-backed (pid)
+        elif job.get('pid'):
+            try:
+                import os
                 if os.name == 'nt':
-                    # Windows: suspend process using ctypes
                     import ctypes
                     kernel32 = ctypes.windll.kernel32
                     handle = kernel32.OpenProcess(0x0002 | 0x0400, False, job['pid'])
@@ -91,15 +103,29 @@ class DownloadManager:
                 print(f"Paused download {download_id} (PID: {job['pid']})")
             except Exception as e:
                 print(f"Failed to pause download {download_id}: {e}")
+        else:
+            print(f"Pause not supported for download {download_id} (no pid/gid)")
         self.persistence.save(self.queue, self.history)
 
     def resume(self, download_id):
         job = next((j for j in self.queue if j['id'] == download_id), None)
-        if job and job.get('pid'):
+        if not job:
+            print(f"Download {download_id} not found")
+            return
+        backend_name = str(job.get('backend', '')).lower()
+        # aria2 RPC (gid)
+        if job.get('gid') and 'aria2' in backend_name and job['gid'] != 'direct-download':
             try:
-                import os, sys
+                self.aria2.resume(job['gid'])
+                job['status'] = 'started'
+                print(f"Resumed download {download_id} (GID: {job['gid']})")
+            except Exception as e:
+                print(f"Failed to resume download {download_id}: {e}")
+        # Process-backed (pid)
+        elif job.get('pid'):
+            try:
+                import os
                 if os.name == 'nt':
-                    # Windows: resume process using ctypes
                     import ctypes
                     kernel32 = ctypes.windll.kernel32
                     handle = kernel32.OpenProcess(0x0002 | 0x0400, False, job['pid'])
@@ -113,6 +139,8 @@ class DownloadManager:
                 print(f"Resumed download {download_id} (PID: {job['pid']})")
             except Exception as e:
                 print(f"Failed to resume download {download_id}: {e}")
+        else:
+            print(f"Resume not supported for download {download_id} (no pid/gid)")
         self.persistence.save(self.queue, self.history)
 
     def remove(self, download_id):

@@ -1,9 +1,13 @@
+
 # Cross-Platform Downloader
 
-Command-line download helper for aria2 and MEGAcmd with portable binaries, queue persistence, and backend auto-selection.
+Command-line and PyQt GUI download helper for aria2 and MEGAcmd with portable binaries, queue persistence, backend auto-selection, and real-time progress tracking.
 
 ## Highlights
-- Add, pause, resume, remove, and inspect downloads from a single CLI.
+- Add, pause, resume, remove, and inspect downloads from a single CLI or GUI.
+- True pause/resume support for aria2 RPC jobs (GID) and process-backed jobs (PID).
+- PyQt GUI frontend: add downloads, view progress, and refresh status for all backends.
+- Real-time progress bar and refresh button in GUI, integrated with CLI and state file.
 - Auto-select backend: HTTP/HTTPS defaults to aria2; Mega links use MEGAcmd (override with `--backend`).
 - Portable binaries: `get-aria2` and `get-mega` fetch Windows-ready executables into the repo tree.
 - Resilient aria2: RPC auto-start with port retry; auto-falls back to standalone aria2c (no RPC) when sockets are blocked.
@@ -37,12 +41,24 @@ python -m downloader.cli status <id>
 
 # Remove a job
 python -m downloader.cli remove <id>
+
+# Launch the PyQt GUI
+python downloader/gui/main_window.py
 ```
+
+
+## GUI reference
+- Add a download by entering a URL and clicking "Download".
+- View all downloads in a table with progress, status, backend, and controls.
+- Pause/resume supported for aria2 RPC jobs (GID) and process-backed jobs (PID).
+- Remove jobs from the list, or remove and delete the downloaded file.
+- Progress is tracked for all backends (aria2, Mega, direct-download) and updates to 100% when completed.
+- The GUI reads the state file and uses CLI commands to show real-time status.
 
 ## CLI reference
 - `add <url> [--backend aria2|mega]` — enqueue and start a download. Stores an ID; aria2 uses RPC, Mega uses `mega-get`.
-- `pause <id>` — suspend a process-backed download (best-effort for Mega; aria2 pause not implemented yet).
-- `resume <id>` — resume a paused process (best-effort for Mega; aria2 resume not implemented yet).
+- `pause <id>` — pause a download (supported for aria2 RPC jobs (GID) and process-backed jobs (PID)).
+- `resume <id>` — resume a paused download (supported for aria2 RPC jobs (GID) and process-backed jobs (PID)).
 - `remove <id>` — terminate a process (when tracked) and drop it from the queue.
 - `status [id]` — show one download or the whole queue.
 - `list` — refresh lightweight status and print the queue (same output as `status`).
@@ -50,11 +66,11 @@ python -m downloader.cli remove <id>
 - `aria2-list` — list active aria2 downloads via RPC.
 - `get-aria2` — download and place `aria2c.exe` under `downloader/aria2_portable/` (Windows only).
 - `get-mega` — download MEGAcmd installer, copy binaries to `downloader/mega_portable/MEGAcmd`, and uninstall the system copy to stay portable.
- - `get-7zip` — download portable 7zr.exe to `downloader/7zip_portable/` (Windows only).
+- `get-7zip` — download portable 7zr.exe to `downloader/7zip_portable/` (Windows only).
 - `config show` — print current stored settings (aria2/Mega); secrets are masked.
 - `config aria2 [--rpc-secret ...] [--rpc-port ...]` — set aria2 RPC secret/port.
 - `config mega [--email ...] [--password ...]` — set Mega credentials.
- - `--aria2-direct-fallback / --no-aria2-direct-fallback` — global flags to enable/disable direct download fallback (defaults to env/disabled). Direct fallback is now the last resort; standalone aria2c is preferred when RPC sockets are blocked.
+- `--aria2-direct-fallback / --no-aria2-direct-fallback` — global flags to enable/disable direct download fallback (defaults to env/disabled). Direct fallback is now the last resort; standalone aria2c is preferred when RPC sockets are blocked.
 
 Run `python -m downloader.cli --help` for the latest options and descriptions.
 
@@ -86,8 +102,16 @@ Run `python -m downloader.cli --help` for the latest options and descriptions.
 - Mega commands fail: open `downloader/mega_portable/MEGAcmd/mega-login.bat` (or run via cmd) to sign in; verify files exist under `downloader/mega_portable/MEGAcmd`.
 - Reset state: stop downloads, then delete `.downloader_state.json` and re-run commands to start fresh.
 
+
 ## Roadmap
-- Pause/resume support for aria2 RPC jobs.
+- True pause/resume support for aria2 RPC jobs (GID) and process-backed jobs (PID).
 - Rich progress output and notifications.
-- GUI frontend (Qt/PySide).
+- GUI frontend (PyQt):
+	- Add downloads via URL
+	- Table view for all downloads with progress, status, backend, and controls
+	- Pause/resume/remove for all supported jobs
+	- Remove and delete file option
+	- Progress bar and refresh button for all backends
+	- Reads state file and uses CLI for real-time updates
+	- Auto-refresh, downloads list, settings panel
 
